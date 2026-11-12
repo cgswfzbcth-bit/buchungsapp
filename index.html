@@ -76,6 +76,8 @@ input,select{font:inherit;font-size:15px;color:var(--fg);background:var(--field)
 .fold .body{padding:0 18px 18px;display:grid;gap:12px}
 .fold .form{padding:0}
 .boxed{border:1px solid var(--line);border-radius:10px}
+.form.vac{grid-template-columns:1fr 1fr auto}
+.vacnote{font-weight:600;color:var(--warn);border-bottom:1px solid var(--line);padding-bottom:10px;margin-bottom:4px}
 
 /* Statistik: ein Balken pro Termin, Anteil „vor dir“ an allen Plätzen */
 .stats{display:grid;gap:12px}
@@ -182,6 +184,17 @@ footer{color:var(--muted);font-size:13px;display:flex;flex-wrap:wrap;gap:6px 16p
         <button class="primary" type="submit">Hinzufügen</button>
       </form>
       <datalist id="titles"></datalist>
+    </section>
+
+    <section>
+      <div class="head"><h2>Urlaub</h2><button class="small" type="button" id="vacToggle" aria-expanded="false" aria-controls="vacForm">+ Urlaub</button></div>
+      <p class="sub" id="vacHint">In dieser Zeit wird für keinen Kurs gebucht – danach geht es automatisch weiter.</p>
+      <div class="panel list" id="vacs" hidden></div>
+      <form class="panel form vac" id="vacForm" hidden>
+        <label>Erster Kurstag ohne Buchung<input id="vacFrom" type="date" required></label>
+        <label>Letzter Kurstag ohne Buchung<input id="vacTo" type="date" required></label>
+        <button class="primary" type="submit">Speichern</button>
+      </form>
     </section>
 
     <div class="folds">
@@ -357,6 +370,10 @@ function rules(){
 }
 const who = r => r.accounts.length === cfg.accounts.length ? "beide Konten" : r.accounts.join(", ");
 
+// Urlaub (gleiche Regel wie book.js): Kursdatum liegt in von–bis, jeweils einschließlich
+const ymdB = d => new Intl.DateTimeFormat("sv-SE",{timeZone:TZ}).format(d);
+const deDate = s => s.split("-").reverse().join(".");
+const inUrlaub = day => (cfg.urlaub || []).find(u => u.von <= day && day <= u.bis) || null;
 function upcoming(rs, now, n){
   const out = [], t = parts(now);
   for (let i = -cfg.advanceDays; i < 40; i++){
@@ -366,7 +383,7 @@ function upcoming(rs, now, n){
       const [hh, mm] = r.time.split(":").map(Number);
       const start = berlin(base.getUTCFullYear(), base.getUTCMonth()+1, base.getUTCDate(), hh, mm), sp = parts(start);
       const fire = berlin(sp.y, sp.m, sp.d - cfg.advanceDays, sp.h, sp.mi, cfg.bookDelaySeconds);
-      if (fire > now) out.push({ r, start, fire });
+      if (fire > now && !inUrlaub(ymdB(start))) out.push({ r, start, fire });
     }
   }
   return out.sort((a,b) => a.fire - b.fire).slice(0, n);
@@ -377,15 +394,27 @@ function render(){
   $("delay").textContent = cfg.bookJitterSeconds ? `${cfg.bookDelaySeconds}–${String(cfg.bookDelaySeconds + cfg.bookJitterSeconds).replace(".", ",")}` : cfg.bookDelaySeconds;
   // Nächste Buchung
   const up = upcoming(rs, now, 6), n = up[0];
+  // Urlaub-Liste
+  const vacs = (cfg.urlaub || []).filter(u => u.bis >= ymdB(now));
+  $("vacs").hidden = !vacs.length;
+  $("vacs").replaceChildren(...vacs.map(u => el("div",{className:"item"},
+    el("div",{className:"plate",style:"--plate:var(--plate-yellow)","aria-hidden":"true"}),
+    el("div",{style:"min-width:0"}, el("div",{className:"title"}, `${deDate(u.von)} – ${deDate(u.bis)}`),
+      el("div",{className:"s"}, u.von <= ymdB(now) ? "läuft gerade – keine Buchungen" : "keine Buchungen für Kurse in dieser Zeit")),
+    el("div",{className:"right"}, el("button",{className:"small",type:"button",onclick:() => manage({ aktion: "Urlaub löschen", von: u.von, bis: u.bis }, "Urlaub löschen")}, "Löschen")))));
+  const nowVac = vacs.find(u => u.von <= ymdB(now));
   if (n){
     $("next").style.setProperty("--plate", `var(${n.r.plate})`);
-    $("next").replaceChildren(el("div",{className:"eyebrow"},"Nächste Buchung"),
+    $("next").replaceChildren(...(nowVac ? [el("div",{className:"vacnote"}, `Urlaub bis ${deDate(nowVac.bis)} – für Kurse bis dahin wird nichts gebucht.`)] : []),
+      el("div",{className:"eyebrow"},"Nächste Buchung"),
       el("div",{className:"big"}, fDay(n.fire), el("small",{},"um"), fTime(n.fire)),
       el("div",{}, el("div",{className:"what"}, `${n.r.title} für ${n.r.weekday}, ${fDM(n.start)}`), el("div",{className:"meta"}, `Kurs um ${fHM(n.start)} Uhr · ${who(n.r)}`)),
       ...(up.length > 1 ? [el("div",{className:"later"}, el("div",{className:"eyebrow"},"Danach"),
         ...up.slice(1, 4).map(x => el("div",{className:"row"}, el("span",{className:"mono"}, `${fDay(x.fire)} · ${fTime(x.fire)}`), el("span",{}, `${x.r.title} für ${fDay(x.start)}`))))] : []),
       el("div",{className:"later recent",id:"recent",hidden:true}));
-  } else $("next").replaceChildren(el("div",{className:"what"},"Keine Kurse eingetragen."), el("div",{className:"meta"},"Füge unten deinen ersten Kurs hinzu."), el("div",{className:"later recent",id:"recent",hidden:true}));
+  } else $("next").replaceChildren(...(rs.length
+      ? [el("div",{className:"what"},"Keine Buchung in den nächsten Wochen."), el("div",{className:"meta"}, nowVac ? `Urlaub bis ${deDate(nowVac.bis)}.` : "Alle Termine fallen in deinen Urlaub.")]
+      : [el("div",{className:"what"},"Keine Kurse eingetragen."), el("div",{className:"meta"},"Füge unten deinen ersten Kurs hinzu.")]), el("div",{className:"later recent",id:"recent",hidden:true}));
   renderRecent();
   // Kurse
   $("ruleCount").textContent = `(${rs.length})`;
@@ -501,6 +530,20 @@ function showAdd(on){
   if (on) $("addTitle").focus();
 }
 $("addToggle").onclick = () => showAdd($("addForm").hidden);
+function showVac(on){
+  $("vacForm").hidden = !on;
+  $("vacToggle").textContent = on ? "Schließen" : "+ Urlaub";
+  $("vacToggle").setAttribute("aria-expanded", String(on));
+  if (on){ const t = ymdB(new Date()); $("vacFrom").min = t; $("vacTo").min = t; $("vacFrom").focus(); }
+}
+$("vacToggle").onclick = () => showVac($("vacForm").hidden);
+$("vacFrom").addEventListener("change", () => { $("vacTo").min = $("vacFrom").value; if ($("vacTo").value && $("vacTo").value < $("vacFrom").value) $("vacTo").value = $("vacFrom").value; });
+$("vacForm").addEventListener("submit", async e => {
+  e.preventDefault();
+  const von = $("vacFrom").value, bis = $("vacTo").value;
+  if (bis < von){ status("Urlaub", "„Letzter Tag“ liegt vor „Erster Tag“.", "err"); return; }
+  if (await manage({ aktion: "Urlaub eintragen", von, bis }, `Urlaub ${deDate(von)} – ${deDate(bis)}`)){ $("vacForm").reset(); showVac(false); }
+});
 $("addForm").addEventListener("submit", async e => {
   e.preventDefault();
   const t = $("addTitle").value.trim();
