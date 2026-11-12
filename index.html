@@ -181,7 +181,7 @@ footer{color:var(--muted);font-size:13px;display:flex;flex-wrap:wrap;gap:6px 16p
         <label class="wide">Kurs (Name wie in der App)<input id="addTitle" list="titles" required placeholder="z. B. Gymnastics"></label>
         <label>Kurstag<select id="addDay"></select></label>
         <label>Beginn<input id="addTime" type="time" required step="60"></label>
-        <label>Konto<select id="addWho"><option>Beide</option><option>Konto 1</option><option>Konto 2</option></select></label>
+        <label>Wer?<select id="addWho"></select></label>
         <button class="primary" type="submit">Hinzufügen</button>
       </form>
       <datalist id="titles"></datalist>
@@ -194,7 +194,7 @@ footer{color:var(--muted);font-size:13px;display:flex;flex-wrap:wrap;gap:6px 16p
       <form class="panel form vac" id="vacForm" hidden>
         <label>Erster Kurstag ohne Buchung<input id="vacFrom" type="date" required></label>
         <label>Letzter Kurstag ohne Buchung<input id="vacTo" type="date" required></label>
-        <label>Wer ist im Urlaub?<select id="vacWho"><option>Beide</option><option>Konto 1</option><option>Konto 2</option></select></label>
+        <label>Wer ist im Urlaub?<select id="vacWho"></select></label>
         <button class="primary" type="submit">Speichern</button>
       </form>
     </section>
@@ -216,7 +216,7 @@ footer{color:var(--muted);font-size:13px;display:flex;flex-wrap:wrap;gap:6px 16p
         <label class="wide">Kurs<input id="onceTitle" list="titles" required placeholder="z. B. Gymnastics"></label>
         <label>Datum<input id="onceDate" type="date" required></label>
         <label>Beginn<input id="onceTime" type="time" required step="60"></label>
-        <label>Konto<select id="onceWho"><option value="alle">Beide</option><option value="ACCOUNT1">Konto 1</option><option value="ACCOUNT2">Konto 2</option></select></label>
+        <label>Wer?<select id="onceWho"></select></label>
         <button class="primary" type="submit">Jetzt buchen</button>
       </form>
       </div>
@@ -437,6 +437,12 @@ function render(){
     el("div",{className:"d"}, SHORT[wd]),
     ...rs.filter(r => r.openWd === wd).sort((a,b) => a.time.localeCompare(b.time)).map(r =>
       el("div",{className:"tag",style:`--plate:var(${r.plate})`}, el("span",{className:"t"}, `${r.time}:${String(cfg.bookDelaySeconds).padStart(2,"0")}`), `${r.title} für ${SHORT[DAYS.indexOf(r.weekday)]}`)))));
+  // Auswahllisten mit den Kontonamen aus config.json (die App selbst enthält keine Namen)
+  const fill = (id, opts) => { const s = $(id), v = s.value; s.replaceChildren(...opts.map(([val, txt]) => el("option",{value:val}, txt))); if (opts.some(o => o[0] === v)) s.value = v; };
+  const names = cfg.accounts.map(a => [a.name, a.name]);
+  fill("addWho", [["Beide","Beide"], ...names]);
+  fill("vacWho", [["Beide","Beide"], ...names]);
+  fill("onceWho", [["alle","Beide"], ...cfg.accounts.map(a => [a.secretPrefix, a.name])]);
   // Vorschläge
   const titles = new Set([...KNOWN, ...rs.map(r => r.title)]);
   $("titles").replaceChildren(...[...titles].map(t => el("option",{value:t})));
