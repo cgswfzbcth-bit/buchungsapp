@@ -1,0 +1,550 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>Buchungsapp</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+/* Layout: eine Spalte wie das Whiteboard in der Box – nächste Buchung, Kursliste mit Bearbeiten, Wochenplan, Werkzeuge */
+:root{
+  --bg:#f3f4f2; --panel:#fff; --fg:#1b1f1d; --muted:#5f6763; --line:#dde1de; --field:#fafbfa;
+  --accent:#c8331e; --plate-red:#c8331e; --plate-blue:#1f5fbf; --plate-yellow:#d99a00; --plate-green:#2f8a4c;
+  --good:#2f8a4c; --bad:#c8331e; --warn:#b26a00;
+  --display:"Barlow Condensed","Arial Narrow",system-ui,sans-serif;
+  --body:"Inter",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#141716; --panel:#1c201e; --fg:#eceeed; --muted:#9aa29e; --line:#2c3230; --field:#161918;
+  --accent:#ff6a52; --plate-red:#ff6a52; --plate-blue:#6aa2ff; --plate-yellow:#f2bd3a; --plate-green:#5cc485;
+  --good:#5cc485; --bad:#ff6a52; --warn:#f2bd3a; color-scheme:dark}}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--fg);font:15px/1.5 var(--body);
+  padding:max(28px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) 56px max(16px,env(safe-area-inset-left))}
+.wrap{max-width:880px;margin:0 auto;display:grid;gap:30px}
+h1,h2,h3{font-family:var(--display);font-weight:700;margin:0;text-wrap:balance;text-transform:uppercase}
+h1{font-size:clamp(30px,6vw,42px);line-height:1.05}
+h2{font-size:22px;letter-spacing:.04em}
+h3{font-size:17px;letter-spacing:.04em}
+.eyebrow{font-size:12px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.sub{color:var(--muted);margin:0;max-width:64ch}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+section{display:grid;gap:12px}
+.head{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:end;justify-content:space-between}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:14px}
+[hidden]{display:none!important}
+
+/* Buttons & Felder */
+button,.btn{font:inherit;font-weight:600;font-size:14px;border-radius:10px;padding:9px 14px;cursor:pointer;border:1px solid var(--line);background:var(--panel);color:var(--fg);text-decoration:none;display:inline-flex;align-items:center;gap:6px}
+button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+button.ghost{background:transparent}
+button.small{font-size:13px;padding:5px 10px;border-radius:8px}
+button:disabled{opacity:.55;cursor:progress}
+button:focus-visible,input:focus-visible,select:focus-visible,.btn:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+label{display:grid;gap:4px;font-size:13px;font-weight:600;color:var(--muted);min-width:0}
+input,select{font:inherit;font-size:15px;color:var(--fg);background:var(--field);border:1px solid var(--line);border-radius:10px;padding:9px 11px;width:100%;min-width:0}
+.form{display:grid;grid-template-columns:2fr 1.2fr 1fr 1.2fr auto;gap:10px;align-items:end;padding:16px}
+.form.once{grid-template-columns:2fr 1.3fr 1fr 1.2fr auto}
+
+/* Nächste Buchung */
+.next{padding:20px 22px;display:grid;gap:8px;border-top:6px solid var(--plate,var(--accent))}
+.big{font-family:var(--display);font-weight:700;font-size:clamp(32px,7vw,50px);line-height:1;font-variant-numeric:tabular-nums}
+.big small{font-size:.5em;color:var(--muted);margin:0 8px}
+.what{font-size:18px;font-weight:600}
+.meta{color:var(--muted)}
+.later{border-top:1px solid var(--line);margin-top:8px;padding-top:10px;display:grid;gap:3px;font-size:14px;color:var(--muted)}
+.later .row{display:flex;flex-wrap:wrap;gap:0 14px}
+.later .mono{color:var(--fg)}
+.count{font-family:var(--body);font-size:14px;font-weight:500;letter-spacing:0;text-transform:none;color:var(--muted);margin-left:6px}
+
+/* Aufklappbare Bereiche */
+.folds{display:grid;gap:10px}
+.fold{background:var(--panel);border:1px solid var(--line);border-radius:14px}
+.fold>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:12px;padding:15px 18px;border-radius:14px}
+.fold>summary::-webkit-details-marker{display:none}
+.fold>summary::before{content:"";flex:none;width:8px;height:8px;border-right:2px solid var(--muted);border-bottom:2px solid var(--muted);transform:rotate(-45deg);transition:transform .15s}
+.fold[open]>summary::before{transform:rotate(45deg)}
+.fold>summary:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.fold>summary{flex-wrap:wrap}
+.fold>summary h2{white-space:nowrap}
+.fold>summary .chip{margin-left:auto}
+.fold .body{padding:0 18px 18px;display:grid;gap:12px}
+.fold .form{padding:0}
+.boxed{border:1px solid var(--line);border-radius:10px}
+
+/* Statistik: ein Balken pro Termin, Anteil „vor dir“ an allen Plätzen */
+.stats{display:grid;gap:12px}
+.srow{display:grid;grid-template-columns:minmax(0,11rem) minmax(0,1fr) auto;gap:4px 14px;align-items:center}
+.srow .lbl{font-size:14px;overflow-wrap:anywhere}
+.srow .lbl .s{display:block;color:var(--muted);font-size:12.5px}
+.track{height:10px;border-radius:4px;background:var(--line);overflow:hidden}
+.fill{height:100%;border-radius:0 4px 4px 0;background:var(--accent);min-width:2px}
+.srow .val{font-size:14px;text-align:right;white-space:nowrap}
+.srow .val b{font-family:var(--mono);font-weight:500}
+@media (max-width:720px){.srow{grid-template-columns:minmax(0,1fr) auto}.srow .track{grid-column:1/-1;grid-row:2}}
+.recent{gap:8px}
+.recent .srow{grid-template-columns:minmax(0,11rem) minmax(0,1fr) auto}
+.recent .srow .lbl,.recent .srow .val{font-size:13.5px;color:var(--fg)}
+.recent .track{height:8px}
+@media (max-width:720px){.recent .srow{grid-template-columns:minmax(0,1fr) auto}}
+
+/* Listen */
+.list{display:grid}
+.item{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:4px 16px;align-items:center;padding:13px 18px;border-top:1px solid var(--line)}
+.item:first-child{border-top:0}
+.plate{width:14px;height:40px;border-radius:4px;background:var(--plate)}
+.item .title{font-weight:600}
+.item .s{color:var(--muted);font-size:13.5px}
+.right{display:flex;gap:8px;align-items:center;justify-content:flex-end;flex-wrap:wrap;text-align:right}
+.chip{display:inline-block;font-size:12px;font-weight:600;padding:2px 9px;border-radius:999px;border:1px solid var(--line);color:var(--muted);white-space:nowrap}
+.chip.good{color:var(--good);border-color:color-mix(in srgb,var(--good) 45%,transparent)}
+.chip.bad{color:var(--bad);border-color:color-mix(in srgb,var(--bad) 45%,transparent)}
+.chip.run{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 45%,transparent)}
+.empty{padding:18px;color:var(--muted)}
+
+/* Woche */
+.week{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px}
+.day{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 8px;min-height:88px;display:grid;align-content:start;gap:6px}
+.day .d{font-family:var(--display);font-weight:700;font-size:16px;text-transform:uppercase}
+.day.today{outline:2px solid var(--accent);outline-offset:-1px}
+.tag{font-size:11.5px;line-height:1.25;border-left:4px solid var(--plate);padding:2px 0 2px 6px;overflow-wrap:anywhere}
+.tag .t{font-family:var(--mono);display:block}
+
+/* Status */
+.status{position:sticky;bottom:12px;z-index:5;display:grid;gap:6px;padding:14px 16px;border-left:6px solid var(--warn);box-shadow:0 8px 24px rgb(0 0 0 / .12)}
+.status.ok{border-left-color:var(--good)} .status.err{border-left-color:var(--bad)}
+.status .msgs{display:grid;gap:4px;font-size:14px}
+.status .row{display:flex;justify-content:space-between;gap:12px;align-items:center}
+
+/* Setup */
+.setup{padding:20px 22px;display:grid;gap:14px}
+.setup ol{margin:0;padding-left:20px;display:grid;gap:6px}
+.setup code{font-family:var(--mono);font-size:13px;background:var(--field);border:1px solid var(--line);border-radius:6px;padding:1px 6px}
+.inline{display:flex;gap:10px;flex-wrap:wrap;align-items:end}
+.inline label{flex:1 1 260px}
+.err{color:var(--bad);font-weight:600}
+footer{color:var(--muted);font-size:13px;display:flex;flex-wrap:wrap;gap:6px 16px;justify-content:space-between;align-items:center}
+
+@media (max-width:720px){
+  .form,.form.once{grid-template-columns:1fr 1fr}
+  .form .wide{grid-column:1/-1}
+  .form button{grid-column:1/-1;justify-content:center}
+  .week{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .item{grid-template-columns:auto minmax(0,1fr)}
+  .item .right{grid-column:2;justify-content:flex-start;text-align:left}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header style="display:grid;gap:6px">
+    <div class="eyebrow">Box · Buchungsapp</div>
+    <h1>Automatische Kursbuchung</h1>
+    <p class="sub">Freischaltung 5 Tage vor Kursbeginn, gebucht wird <span id="delay">2</span> Sekunden danach. Änderungen hier landen direkt in deinem GitHub-Projekt.</p>
+  </header>
+
+  <!-- Einrichtung -->
+  <div class="panel setup" id="setup" hidden>
+    <h2>Einmal einrichten</h2>
+    <p class="sub">Die App braucht einen GitHub-Schlüssel, um dein Buchungsprojekt ändern zu dürfen. Er wird nur in diesem Browser gespeichert.</p>
+    <ol>
+      <li>Öffne <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">github.com/settings/personal-access-tokens/new</a></li>
+      <li>Name: <code>Buchungsapp</code> · Ablauf: <code>366 days</code></li>
+      <li>Repository access: <b>Only select repositories</b> → <code>buchung-automatik</code></li>
+      <li>Permissions → Add permissions: <b>Actions</b>, <b>Contents</b> und <b>Workflows</b>, jeweils auf <code>Read and write</code></li>
+      <li><b>Generate token</b>, den Schlüssel kopieren und hier einfügen.</li>
+    </ol>
+    <form class="inline" id="tokenForm">
+      <label>GitHub-Schlüssel<input id="tokenInput" type="password" autocomplete="off" spellcheck="false" placeholder="github_pat_…"></label>
+      <button class="primary" type="submit" id="tokenSave">Speichern</button>
+    </form>
+    <div class="err" id="tokenErr" hidden></div>
+  </div>
+
+  <!-- Hauptansicht -->
+  <div id="main" hidden style="display:grid;gap:30px">
+    <div class="panel next" id="next"></div>
+
+    <section>
+      <div class="head"><h2>Meine Kurse <span class="count" id="ruleCount"></span></h2><button class="small" type="button" id="addToggle" aria-expanded="false" aria-controls="addForm">+ Kurs</button></div>
+      <div class="panel list" id="rules"></div>
+      <form class="panel form" id="addForm" hidden>
+        <label class="wide">Kurs (Name wie in der App)<input id="addTitle" list="titles" required placeholder="z. B. Gymnastics"></label>
+        <label>Kurstag<select id="addDay"></select></label>
+        <label>Beginn<input id="addTime" type="time" required step="60"></label>
+        <label>Konto<select id="addWho"><option>Beide</option><option>Konto 1</option><option>Konto 2</option></select></label>
+        <button class="primary" type="submit">Hinzufügen</button>
+      </form>
+      <datalist id="titles"></datalist>
+    </section>
+
+    <div class="folds">
+    <details class="fold">
+      <summary><h2>Woche im Überblick</h2></summary>
+      <div class="body">
+        <p class="sub">Tag und Uhrzeit, zu denen gebucht wird, und welcher Kurs dann reserviert wird.</p>
+        <div class="week" id="week"></div>
+      </div>
+    </details>
+
+    <details class="fold">
+      <summary><h2>Einmal buchen</h2></summary>
+      <div class="body">
+      <p class="sub">Bucht einen Kurs sofort, wenn er schon freigeschaltet ist.</p>
+      <form class="form once" id="onceForm">
+        <label class="wide">Kurs<input id="onceTitle" list="titles" required placeholder="z. B. Gymnastics"></label>
+        <label>Datum<input id="onceDate" type="date" required></label>
+        <label>Beginn<input id="onceTime" type="time" required step="60"></label>
+        <label>Konto<select id="onceWho"><option value="alle">Beide</option><option value="ACCOUNT1">Konto 1</option><option value="ACCOUNT2">Konto 2</option></select></label>
+        <button class="primary" type="submit">Jetzt buchen</button>
+      </form>
+      </div>
+    </details>
+
+    <details class="fold">
+      <summary><h2>Vergangene Buchungen</h2><span class="chip" id="statSummary" hidden></span></summary>
+      <div class="body">
+        <p class="sub">Wie viele Leute schon gebucht waren, bevor du dran warst – gemessen direkt nach jeder automatischen Buchung. Die Leiste zeigt den Anteil an allen Plätzen. Neueste oben.</p>
+        <div class="stats" id="stats"></div>
+      </div>
+    </details>
+
+    <details class="fold">
+      <summary><h2>Letzte Läufe</h2><span class="chip" id="runSummary" hidden></span></summary>
+      <div class="body">
+        <div class="head"><p class="sub">Testlauf: prüft alles, bucht aber nichts.</p><button class="small" type="button" id="testBtn">Testlauf starten</button></div>
+        <div class="list boxed" id="runs"></div>
+      </div>
+    </details>
+    </div>
+
+    <footer>
+      <span>Daten aus <a href="https://github.com/cgswfzbcth-bit/buchung-automatik" target="_blank" rel="noopener">buchung-automatik</a> · Zeiten in deutscher Zeit</span>
+      <button class="small ghost" type="button" id="logout">Schlüssel entfernen</button>
+    </footer>
+  </div>
+
+  <div class="panel status" id="status" hidden role="status" aria-live="polite">
+    <div class="row"><strong id="statusTitle"></strong><button class="small ghost" type="button" id="statusClose">Schließen</button></div>
+    <div class="msgs" id="statusMsgs"></div>
+  </div>
+</div>
+
+<script>
+const OWNER = "cgswfzbcth-bit", REPO = "buchung-automatik";
+const API = `https://api.github.com/repos/${OWNER}/${REPO}`;
+const TZ = "Europe/Berlin";
+const DAYS = ["Sonntag","Montag","Dienstag","Mittwoch","Donnerstag","Freitag","Samstag"];
+const SHORT = ["So","Mo","Di","Mi","Do","Fr","Sa"];
+const PLATES = ["--plate-red","--plate-blue","--plate-yellow","--plate-green"];
+const KNOWN = ["Olympic Weightlifting","Team-WOD","Endurance","Gymnastics","WOD","FitClass","OpenGym","Introklasse","Join Your Coach"];
+const LEAD_MIN = 48;
+const $ = id => document.getElementById(id);
+let cfg = null, busy = false;
+
+// ---------- Speicher ----------
+const store = {
+  get(){ try { return localStorage.getItem("gh_token") || ""; } catch { return ""; } },
+  set(v){ try { localStorage.setItem("gh_token", v); } catch {} },
+  clear(){ try { localStorage.removeItem("gh_token"); } catch {} }
+};
+let token = store.get();
+
+// ---------- GitHub ----------
+async function gh(path, opts = {}){
+  const r = await fetch(path.startsWith("http") ? path : API + path, { cache: "no-store", ...opts, headers: {
+    Accept: "application/vnd.github+json", Authorization: `Bearer ${token}`, "X-GitHub-Api-Version": "2022-11-28",
+    ...(opts.body ? { "Content-Type": "application/json" } : {}) } });
+  if (r.status === 204) return null;
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok){ const e = new Error(ghError(r.status, j)); e.status = r.status; throw e; }
+  return j;
+}
+function ghError(status, j){
+  if (status === 401) return "Der Schlüssel ist ungültig oder abgelaufen.";
+  if (status === 403 || status === 404) return "Der Schlüssel hat keinen Zugriff. Prüfe Repository und Berechtigungen (Actions, Contents, Workflows: Read and write).";
+  return `GitHub meldet ${status}: ${j.message || "unbekannter Fehler"}`;
+}
+const b64dec = s => new TextDecoder().decode(Uint8Array.from(atob(s.replace(/\n/g,"")), c => c.charCodeAt(0)));
+const b64enc = s => { let b = ""; new TextEncoder().encode(s).forEach(x => b += String.fromCharCode(x)); return btoa(b); };
+async function readFile(p){ const j = await gh(`/contents/${p}?ref=main&t=${Date.now()}`); return { text: b64dec(j.content), sha: j.sha }; }
+
+// Workflow starten und auf das Ergebnis warten
+async function runWorkflow(file, inputs, label){
+  const since = Date.now() - 10000;
+  await gh(`/actions/workflows/${file}/dispatches`, { method: "POST", body: JSON.stringify({ ref: "main", inputs }) });
+  status(label, "läuft bei GitHub …", "run");
+  let run = null;
+  for (let i = 0; i < 90; i++){
+    await sleep(i < 5 ? 2000 : 4000);
+    if (!run){
+      const l = await gh(`/actions/workflows/${file}/runs?event=workflow_dispatch&per_page=5`);
+      run = (l.workflow_runs || []).find(r => Date.parse(r.created_at) >= since) || null;
+      continue;
+    }
+    run = await gh(`/actions/runs/${run.id}`);
+    if (run.status === "completed") break;
+  }
+  if (!run || run.status !== "completed") return { ok: false, msgs: ["GitHub antwortet nicht rechtzeitig. Schau später unter „Letzte Läufe“ nach."] };
+  let msgs = [];
+  try {
+    const jobs = await gh(`/actions/runs/${run.id}/jobs`);
+    for (const job of jobs.jobs || []){
+      const ann = await gh(`${job.check_run_url}/annotations`);
+      msgs.push(...ann.filter(a => a.annotation_level !== "warning" || !/Node\.js|deprecated/i.test(a.message)).map(a => a.message));
+    }
+  } catch {}
+  msgs = msgs.filter(m => !/ubuntu-latest|Node\.js \d+ actions/i.test(m));
+  if (!msgs.length) msgs = [run.conclusion === "success" ? "Erfolgreich abgeschlossen." : "Bei GitHub ist ein Fehler aufgetreten."];
+  return { ok: run.conclusion === "success", msgs, url: run.html_url };
+}
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+// ---------- Zeitplan (gleiche Regeln wie manage.js) ----------
+function scheduleBlock(c){
+  const op = new Map();
+  c.accounts.forEach(a => a.classes.forEach(k => {
+    const wd = (DAYS.indexOf(k.weekday) - c.advanceDays % 7 + 7) % 7, [h, m] = k.time.split(":").map(Number);
+    op.set(`${wd} ${k.time}`, { wd, min: h * 60 + m, label: `${DAYS[wd]} ${k.time}`, title: `${k.title} am ${k.weekday}` });
+  }));
+  const lines = [...op.values()].sort((x, y) => ((x.wd + 6) % 7) - ((y.wd + 6) % 7) || x.min - y.min).flatMap(o => [
+    `    # Freischaltung ${o.label} (für ${o.title})`,
+    ...[60, 120].map(off => { const t = (((o.wd * 1440 + o.min - LEAD_MIN - off) % 10080) + 10080) % 10080; return `    - cron: '${t % 60} ${Math.floor(t / 60) % 24} * * ${Math.floor(t / 1440)}'`; })
+  ]);
+  return lines.length ? `  schedule:\n    # Zeiten in UTC, je eine für Winter- und Sommerzeit; ca. ${LEAD_MIN} Min. vor der Freischaltung.\n${lines.join("\n")}\n` : "";
+}
+async function syncSchedule(){
+  const f = await readFile(".github/workflows/buchen.yml");
+  const block = scheduleBlock(cfg);
+  const next = /  schedule:\n/.test(f.text) ? f.text.replace(/  schedule:\n(?:    .*\n)*/, block) : f.text.replace(/^on:\n/m, "on:\n" + block);
+  if (next === f.text) return false;
+  await gh(`/contents/.github/workflows/buchen.yml`, { method: "PUT", body: JSON.stringify({ message: "Zeitplan an Kursliste angepasst (App)", content: b64enc(next), sha: f.sha, branch: "main" }) });
+  return true;
+}
+
+// ---------- Zeit ----------
+function parts(d){
+  const p = Object.fromEntries(new Intl.DateTimeFormat("en-GB",{timeZone:TZ,year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",weekday:"short",hourCycle:"h23"}).formatToParts(d).map(x=>[x.type,x.value]));
+  return { y:+p.year, m:+p.month, d:+p.day, h:+p.hour, mi:+p.minute, wd:{Sun:0,Mon:1,Tue:2,Wed:3,Thu:4,Fri:5,Sat:6}[p.weekday] };
+}
+function berlin(y,m,d,h,mi,s=0){ let g = Date.UTC(y,m-1,d,h,mi,s); for (let i=0;i<3;i++){ const p=parts(new Date(g)); g += Date.UTC(y,m-1,d,h,mi,s) - Date.UTC(p.y,p.m-1,p.d,p.h,p.mi,s); } return new Date(g); }
+const fDay = d => new Intl.DateTimeFormat("de-DE",{timeZone:TZ,weekday:"short",day:"2-digit",month:"2-digit"}).format(d);
+const fTime = d => new Intl.DateTimeFormat("de-DE",{timeZone:TZ,hour:"2-digit",minute:"2-digit",second:"2-digit"}).format(d);
+const fDM = d => new Intl.DateTimeFormat("de-DE",{timeZone:TZ,day:"2-digit",month:"2-digit"}).format(d);
+const fHM = d => new Intl.DateTimeFormat("de-DE",{timeZone:TZ,hour:"2-digit",minute:"2-digit"}).format(d);
+const fRun = d => new Intl.DateTimeFormat("de-DE",{timeZone:TZ,weekday:"short",day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"}).format(d);
+
+// ---------- DOM ----------
+function el(tag, attrs = {}, ...kids){ const e = document.createElement(tag); for (const [k,v] of Object.entries(attrs)){ if (k === "style") e.setAttribute("style", v); else if (k.startsWith("on")) e.addEventListener(k.slice(2), v); else if (k in e) e[k] = v; else e.setAttribute(k, v); } e.append(...kids); return e; }
+function status(title, msgs, kind, url){
+  $("status").hidden = false; $("status").className = "panel status " + (kind === "ok" ? "ok" : kind === "err" ? "err" : "");
+  $("statusTitle").textContent = title;
+  $("statusMsgs").replaceChildren(...[].concat(msgs).map(m => el("div", {}, m)), ...(url ? [el("a",{href:url,target:"_blank",rel:"noopener"},"Details bei GitHub ansehen")] : []));
+}
+$("statusClose").onclick = () => $("status").hidden = true;
+
+function rules(){
+  const m = new Map();
+  cfg.accounts.forEach(a => a.classes.forEach(c => { const k = `${c.title}|${c.weekday}|${c.time}`; if (!m.has(k)) m.set(k, { ...c, accounts: [] }); m.get(k).accounts.push(a.name); }));
+  return [...m.values()].sort((x,y) => ((DAYS.indexOf(x.weekday)+6)%7) - ((DAYS.indexOf(y.weekday)+6)%7) || x.time.localeCompare(y.time))
+    .map((r,i) => ({ ...r, plate: PLATES[i % PLATES.length], openWd: (DAYS.indexOf(r.weekday) - cfg.advanceDays % 7 + 7) % 7 }));
+}
+const who = r => r.accounts.length === cfg.accounts.length ? "beide Konten" : r.accounts.join(", ");
+
+function upcoming(rs, now, n){
+  const out = [], t = parts(now);
+  for (let i = -cfg.advanceDays; i < 40; i++){
+    const base = new Date(Date.UTC(t.y, t.m-1, t.d+i, 12));
+    for (const r of rs){
+      if (base.getUTCDay() !== DAYS.indexOf(r.weekday)) continue;
+      const [hh, mm] = r.time.split(":").map(Number);
+      const start = berlin(base.getUTCFullYear(), base.getUTCMonth()+1, base.getUTCDate(), hh, mm), sp = parts(start);
+      const fire = berlin(sp.y, sp.m, sp.d - cfg.advanceDays, sp.h, sp.mi, cfg.bookDelaySeconds);
+      if (fire > now) out.push({ r, start, fire });
+    }
+  }
+  return out.sort((a,b) => a.fire - b.fire).slice(0, n);
+}
+
+function render(){
+  const rs = rules(), now = new Date();
+  $("delay").textContent = cfg.bookJitterSeconds ? `${cfg.bookDelaySeconds}–${String(cfg.bookDelaySeconds + cfg.bookJitterSeconds).replace(".", ",")}` : cfg.bookDelaySeconds;
+  // Nächste Buchung
+  const up = upcoming(rs, now, 6), n = up[0];
+  if (n){
+    $("next").style.setProperty("--plate", `var(${n.r.plate})`);
+    $("next").replaceChildren(el("div",{className:"eyebrow"},"Nächste Buchung"),
+      el("div",{className:"big"}, fDay(n.fire), el("small",{},"um"), fTime(n.fire)),
+      el("div",{}, el("div",{className:"what"}, `${n.r.title} für ${n.r.weekday}, ${fDM(n.start)}`), el("div",{className:"meta"}, `Kurs um ${fHM(n.start)} Uhr · ${who(n.r)}`)),
+      ...(up.length > 1 ? [el("div",{className:"later"}, el("div",{className:"eyebrow"},"Danach"),
+        ...up.slice(1, 4).map(x => el("div",{className:"row"}, el("span",{className:"mono"}, `${fDay(x.fire)} · ${fTime(x.fire)}`), el("span",{}, `${x.r.title} für ${fDay(x.start)}`))))] : []),
+      el("div",{className:"later recent",id:"recent",hidden:true}));
+  } else $("next").replaceChildren(el("div",{className:"what"},"Keine Kurse eingetragen."), el("div",{className:"meta"},"Füge unten deinen ersten Kurs hinzu."), el("div",{className:"later recent",id:"recent",hidden:true}));
+  renderRecent();
+  // Kurse
+  $("ruleCount").textContent = `(${rs.length})`;
+  $("rules").replaceChildren(...(rs.length ? rs.map(r => el("div",{className:"item"},
+    el("div",{className:"plate",style:`--plate:var(${r.plate})`,"aria-hidden":"true"}),
+    el("div",{style:"min-width:0"}, el("div",{className:"title"}, r.title), el("div",{className:"s"}, `jeden ${r.weekday}, ${r.time} Uhr · gebucht ${DAYS[r.openWd]} ${r.time}:${String(cfg.bookDelaySeconds).padStart(2,"0")}`)),
+    el("div",{className:"right"}, el("span",{className:"chip" + (r.accounts.length === cfg.accounts.length ? " good" : "")}, who(r)),
+      el("button",{className:"small",type:"button",onclick:() => remove(r)}, "Entfernen"))
+  )) : [el("div",{className:"empty"},"Noch keine Kurse. Tippe auf „+ Kurs“.")]));
+  // Woche
+  const today = parts(now).wd;
+  $("week").replaceChildren(...[1,2,3,4,5,6,0].map(wd => el("div",{className:"day" + (wd === today ? " today" : "")},
+    el("div",{className:"d"}, SHORT[wd]),
+    ...rs.filter(r => r.openWd === wd).sort((a,b) => a.time.localeCompare(b.time)).map(r =>
+      el("div",{className:"tag",style:`--plate:var(${r.plate})`}, el("span",{className:"t"}, `${r.time}:${String(cfg.bookDelaySeconds).padStart(2,"0")}`), `${r.title} für ${SHORT[DAYS.indexOf(r.weekday)]}`)))));
+  // Vorschläge
+  const titles = new Set([...KNOWN, ...rs.map(r => r.title)]);
+  $("titles").replaceChildren(...[...titles].map(t => el("option",{value:t})));
+}
+
+async function loadRuns(){
+  try {
+    const names = { "Kurse buchen": "Automatische Buchung", "Einmal buchen": "Einmal buchen", "Kurse verwalten": "Kurse geändert" };
+    const l = await gh(`/actions/runs?per_page=10`);
+    const runs = l.workflow_runs || [];
+    const last = runs[0], sum = $("runSummary");
+    sum.hidden = !last;
+    if (last){
+      const bad = last.status === "completed" && !["success","cancelled","skipped"].includes(last.conclusion);
+      sum.className = "chip " + (last.status !== "completed" ? "run" : bad ? "bad" : "good");
+      sum.textContent = (last.status !== "completed" ? "läuft" : bad ? "zuletzt Fehler" : "zuletzt ok") + " · " + fDay(new Date(last.created_at));
+    }
+    $("runs").replaceChildren(...(runs.length ? runs.map(r => {
+      const st = r.status !== "completed" ? ["läuft","run"] : r.conclusion === "success" ? ["ok","good"] : r.conclusion === "cancelled" ? ["abgebrochen",""] : ["Fehler","bad"];
+      const kind = r.event === "schedule" ? "automatisch" : "von Hand";
+      return el("div",{className:"item"}, el("div",{className:"plate",style:`--plate:var(${st[1] === "bad" ? "--plate-red" : st[1] === "good" ? "--plate-green" : "--plate-yellow"})`,"aria-hidden":"true"}),
+        el("div",{style:"min-width:0"}, el("div",{className:"title"}, names[r.name] || r.name), el("div",{className:"s"}, `${fRun(new Date(r.created_at))} · ${kind}`)),
+        el("div",{className:"right"}, el("span",{className:"chip " + st[1]}, st[0]), el("a",{className:"btn small",href:r.html_url,target:"_blank",rel:"noopener"},"Details")));
+    }) : [el("div",{className:"empty"},"Noch keine Läufe.")]));
+  } catch (e) { $("runs").replaceChildren(el("div",{className:"empty"}, e.message)); }
+}
+
+async function loadConfig(){ cfg = JSON.parse((await readFile("config.json")).text); render(); }
+
+// ---------- Statistik (statistik.json, geschrieben von book.js) ----------
+async function loadStats(){
+  let rows = [];
+  try { rows = JSON.parse((await readFile("statistik.json")).text); }
+  catch (e) { if (e.status !== 404){ $("stats").replaceChildren(el("div",{className:"empty"}, e.message)); return; } }
+  // ein Eintrag pro Termin; bei zwei Konten zählt das zuerst gebuchte (kleinste Belegung)
+  const m = new Map();
+  for (const r of rows){
+    const k = `${r.datum}|${r.uhrzeit}|${r.kurs}`;
+    const g = m.get(k) || { ...r, belegt: Infinity, plaetze: 0 };
+    g.belegt = Math.min(g.belegt, r.belegt); g.plaetze = Math.max(g.plaetze, r.plaetze || 0);
+    m.set(k, g);
+  }
+  statTerms = [...m.values()].sort((a,b) => (b.datum + b.uhrzeit).localeCompare(a.datum + a.uhrzeit)).slice(0, 20);
+  renderRecent();
+  const terms = statTerms, sum = $("statSummary");
+  if (!terms.length){
+    sum.hidden = true;
+    $("stats").replaceChildren(el("div",{className:"empty",style:"padding:0"},"Noch keine Daten. Die erste Zahl kommt nach der nächsten automatischen Buchung."));
+    return;
+  }
+  const avg = terms.reduce((s,t) => s + before(t), 0) / terms.length;
+  sum.hidden = false; sum.className = "chip";
+  sum.textContent = `im Schnitt ${avg.toLocaleString("de-DE",{maximumFractionDigits:1})} vor dir`;
+  $("stats").replaceChildren(...terms.map(statRow));
+}
+let statTerms = [];
+const before = t => Math.max(0, t.belegt - 1);
+// eine Zeile: Kurs + Termin, Balken (Anteil „vor dir“ an allen Plätzen), Zahl
+function statRow(t){
+  const [y,mo,d] = t.datum.split("-").map(Number), day = fDay(new Date(Date.UTC(y, mo-1, d, 12)));
+  const cap = t.plaetze || Math.max(t.belegt, 1), n = before(t);
+  const tip = `${t.kurs} am ${day}: ${n} ${n === 1 ? "Person war" : "Personen waren"} vor dir gebucht (Platz ${t.belegt}${t.plaetze ? ` von ${t.plaetze}` : ""})`;
+  return el("div",{className:"srow",title:tip},
+    el("div",{className:"lbl"}, t.kurs, el("span",{className:"s"}, `${day}, ${t.uhrzeit} Uhr`)),
+    el("div",{className:"track",role:"img","aria-label":tip}, el("div",{className:"fill",style:`width:${Math.min(100, n / cap * 100)}%`})),
+    el("div",{className:"val"}, el("b",{}, String(n)), ` vor dir${t.plaetze ? ` · ${t.plaetze} Plätze` : ""}`));
+}
+// kleine Info im Feld „Nächste Buchung“: die letzten 2 Buchungen
+function renderRecent(){
+  const box = $("recent");
+  if (!box) return;
+  box.hidden = !statTerms.length;
+  box.replaceChildren(el("div",{className:"eyebrow"},"Zuletzt gebucht"), ...statTerms.slice(0, 2).map(statRow));
+}
+
+// ---------- Aktionen ----------
+function lock(on){ busy = on; document.querySelectorAll("#main button, #main input, #main select").forEach(x => { if (x.id !== "logout") x.disabled = on; }); }
+async function manage(inputs, label){
+  if (busy) return; lock(true);
+  try {
+    const res = await runWorkflow("verwalten.yml", { ...inputs, zeitplan_pruefen: "false" }, label);
+    if (!res.ok){ status(label + " – nicht gespeichert", [...res.msgs, "Oft ist der Kursname oder die Uhrzeit anders als in der App."], "err", res.url); return; }
+    await loadConfig();
+    const changed = await syncSchedule();
+    status(label + " – gespeichert", [...res.msgs, ...(changed ? ["Zeitplan angepasst."] : [])], "ok", res.url);
+    return true;
+  } catch (e) { status(label + " – Fehler", e.message, "err"); }
+  finally { lock(false); loadRuns(); }
+}
+function remove(r){
+  const konto = r.accounts.length === cfg.accounts.length ? "Beide" : r.accounts[0];
+  manage({ aktion: "Entfernen", kurs: r.title, kurstag: r.weekday, uhrzeit: r.time, konto }, `${r.title} entfernen`);
+}
+function showAdd(on){
+  $("addForm").hidden = !on;
+  $("addToggle").textContent = on ? "Schließen" : "+ Kurs";
+  $("addToggle").setAttribute("aria-expanded", String(on));
+  if (on) $("addTitle").focus();
+}
+$("addToggle").onclick = () => showAdd($("addForm").hidden);
+$("addForm").addEventListener("submit", async e => {
+  e.preventDefault();
+  const t = $("addTitle").value.trim();
+  if (await manage({ aktion: "Hinzufügen", kurs: t, kurstag: $("addDay").value, uhrzeit: $("addTime").value, konto: $("addWho").value }, `${t} hinzufügen`)){
+    $("addForm").reset(); showAdd(false);
+  }
+});
+$("onceForm").addEventListener("submit", async e => {
+  e.preventDefault(); if (busy) return; lock(true);
+  const t = $("onceTitle").value.trim(), label = `${t} buchen`;
+  try {
+    const res = await runWorkflow("einmal.yml", { kurs: t, datum: $("onceDate").value, uhrzeit: $("onceTime").value, konto: $("onceWho").value }, label);
+    status(label + (res.ok ? " – erledigt" : " – nicht gebucht"), res.msgs, res.ok ? "ok" : "err", res.url);
+  } catch (err) { status(label + " – Fehler", err.message, "err"); }
+  finally { lock(false); loadRuns(); }
+});
+$("testBtn").addEventListener("click", async () => {
+  if (busy) return; lock(true);
+  try {
+    const res = await runWorkflow("buchen.yml", { dry_run: "true" }, "Testlauf");
+    status("Testlauf" + (res.ok ? " – alles gefunden" : " – Problem"), res.msgs, res.ok ? "ok" : "err", res.url);
+  } catch (e) { status("Testlauf – Fehler", e.message, "err"); }
+  finally { lock(false); loadRuns(); }
+});
+$("logout").onclick = () => { store.clear(); token = ""; location.reload(); };
+
+// ---------- Start ----------
+$("addDay").replaceChildren(...[1,2,3,4,5,6,0].map(i => el("option",{value:DAYS[i]}, DAYS[i])));
+$("onceDate").value = new Intl.DateTimeFormat("sv-SE",{timeZone:TZ}).format(new Date());
+$("tokenForm").addEventListener("submit", async e => {
+  e.preventDefault(); $("tokenErr").hidden = true; $("tokenSave").disabled = true;
+  token = $("tokenInput").value.trim();
+  try { await gh(""); await gh("/actions/workflows"); store.set(token); $("tokenInput").value = ""; start(); }
+  catch (err) { $("tokenErr").textContent = err.message; $("tokenErr").hidden = false; token = store.get(); }
+  finally { $("tokenSave").disabled = false; }
+});
+async function start(){
+  if (!token){ $("setup").hidden = false; $("main").hidden = true; return; }
+  $("setup").hidden = true; $("main").hidden = false; $("main").style.display = "grid";
+  $("next").replaceChildren(el("div",{className:"meta"},"Lade Kursliste …"));
+  try { await loadConfig(); loadRuns(); loadStats(); }
+  catch (e) { if (e.status === 401){ store.clear(); token = ""; $("tokenErr").textContent = e.message; $("tokenErr").hidden = false; return start(); } status("Laden fehlgeschlagen", e.message, "err"); }
+}
+start();
+</script>
+</body>
+</html>
