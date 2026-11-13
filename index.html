@@ -294,9 +294,9 @@ async function readFile(p){ const j = await gh(`/contents/${p}?ref=main&t=${Date
 async function runWorkflow(file, inputs, label){
   const since = Date.now() - 10000;
   await gh(`/actions/workflows/${file}/dispatches`, { method: "POST", body: JSON.stringify({ ref: "main", inputs }) });
-  status(label, "läuft bei GitHub …", "run");
-  let run = null;
-  for (let i = 0; i < 90; i++){
+  status(label, "läuft …", "run");
+  let run = null, swaps = 0, waited = 0;
+  for (let i = 0; i < 120; i++){
     await sleep(i < 5 ? 2000 : 4000);
     if (!run){
       const l = await gh(`/actions/workflows/${file}/runs?event=workflow_dispatch&per_page=5`);
@@ -304,7 +304,15 @@ async function runWorkflow(file, inputs, label){
       continue;
     }
     run = await gh(`/actions/runs/${run.id}`);
-    if (run.status === "completed") break;
+    if (run.status !== "completed") continue;
+    // Pi offline: die Wache hat den Lauf abgebrochen und einen Ersatzlauf auf GitHub-Servern gestartet → dem folgen
+    if (run.conclusion === "cancelled" && swaps < 3){
+      const l = await gh(`/actions/workflows/${file}/runs?event=workflow_dispatch&per_page=5`);
+      const next = (l.workflow_runs || []).find(r => Date.parse(r.created_at) > Date.parse(run.created_at));
+      if (next){ run = next; swaps++; status(label, "Pi nicht erreichbar – läuft jetzt auf GitHub-Servern …", "run"); continue; }
+      if (++waited < 6) continue; // Ersatzlauf ist evtl. noch nicht sichtbar
+    }
+    break;
   }
   if (!run || run.status !== "completed") return { ok: false, msgs: ["GitHub antwortet nicht rechtzeitig. Schau später unter „Letzte Läufe“ nach."] };
   let msgs = [];
