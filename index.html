@@ -93,6 +93,7 @@ input,select{font:inherit;font-size:15px;color:var(--fg);background:var(--field)
 .sterm .lbl{font-size:14px;overflow-wrap:anywhere}
 .sterm .lbl .s{color:var(--muted);font-size:12.5px;margin-left:6px}
 .sterm .srow .who{font-size:13.5px;color:var(--muted)}
+.srow .val .at{display:block;font-size:12px;color:var(--muted)}
 .sterm .srow{grid-template-columns:4.5rem minmax(0,1fr) auto}
 @media (max-width:720px){.srow{grid-template-columns:minmax(0,1fr) auto}.srow .track{grid-column:1/-1;grid-row:2}.sterm .srow{grid-template-columns:4.5rem minmax(0,1fr) auto}.sterm .srow .track{grid-column:auto;grid-row:auto}}
 .recent{gap:8px}
@@ -229,7 +230,7 @@ footer{color:var(--muted);font-size:13px;display:flex;flex-wrap:wrap;gap:6px 16p
     <details class="fold">
       <summary><h2>Vergangene Buchungen</h2><span class="chip" id="statSummary" hidden></span></summary>
       <div class="body">
-        <p class="sub">Welchen Platz jedes Konto bekommen hat – gemessen direkt nach jeder automatischen Buchung. Volle Leiste = letzter freier Platz. Neueste oben.</p>
+        <p class="sub">Welchen Platz jedes Konto bekommen hat und wann gebucht wurde (+ Sekunden nach der Freischaltung). Volle Leiste = letzter freier Platz. Neueste oben.</p>
         <div class="stats" id="stats"></div>
       </div>
     </details>
@@ -495,7 +496,7 @@ async function loadStats(){
     const k = `${r.datum}|${r.uhrzeit}|${r.kurs}`;
     const g = m.get(k) || { kurs: r.kurs, datum: r.datum, uhrzeit: r.uhrzeit, plaetze: 0, konten: [] };
     g.plaetze = Math.max(g.plaetze, r.plaetze || 0);
-    g.konten.push({ konto: r.konto, belegt: r.belegt });
+    g.konten.push({ konto: r.konto, belegt: r.belegt, um: r.gebuchtUm });
     m.set(k, g);
   }
   for (const g of m.values()) g.konten.sort((a,b) => order.indexOf(a.konto) - order.indexOf(b.konto));
@@ -518,14 +519,23 @@ let statTerms = [];
 function statRow(t){
   const [y,mo,d] = t.datum.split("-").map(Number), day = fDay(new Date(Date.UTC(y, mo-1, d, 12)));
   const cap = t.plaetze || Math.max(...t.konten.map(k => k.belegt), 1);
+  const [h, mi] = t.uhrzeit.split(":").map(Number), open = berlin(y, mo, d - cfg.advanceDays, h, mi);
+  // Uhrzeit der Buchung plus Sekunden nach der Freischaltung
+  const when = k => {
+    if (!k.um) return null;
+    const at = new Date(k.um), sec = (at - open) / 1000;
+    const clock = new Intl.DateTimeFormat("de-DE",{timeZone:TZ,hour:"2-digit",minute:"2-digit",second:"2-digit"}).format(at);
+    return Math.abs(sec) < 3600 ? `${clock} Uhr · ${sec >= 0 ? "+" : "–"}${Math.abs(sec).toLocaleString("de-DE",{minimumFractionDigits:1,maximumFractionDigits:1})} s` : `${clock} Uhr`;
+  };
   return el("div",{className:"sterm"},
     el("div",{className:"lbl"}, t.kurs, el("span",{className:"s"}, `${day}, ${t.uhrzeit} Uhr`)),
     ...t.konten.map(k => {
-      const tip = `${k.konto}: ${t.kurs} am ${day} – Platz ${k.belegt}${t.plaetze ? ` von ${t.plaetze}` : ""} (${k.belegt - 1} vorher gebucht)`;
+      const w = when(k);
+      const tip = `${k.konto}: ${t.kurs} am ${day} – Platz ${k.belegt}${t.plaetze ? ` von ${t.plaetze}` : ""} (${k.belegt - 1} vorher gebucht)${w ? `, gebucht um ${w} nach Freischaltung` : ""}`;
       return el("div",{className:"srow",title:tip},
         el("div",{className:"who"}, k.konto),
         el("div",{className:"track",role:"img","aria-label":tip}, el("div",{className:"fill",style:`width:${Math.min(100, k.belegt / cap * 100)}%`})),
-        el("div",{className:"val"}, "Platz ", el("b",{}, String(k.belegt)), t.plaetze ? ` von ${t.plaetze}` : ""));
+        el("div",{className:"val"}, "Platz ", el("b",{}, String(k.belegt)), t.plaetze ? ` von ${t.plaetze}` : "", ...(w ? [el("span",{className:"at"}, w)] : [])));
     }));
 }
 // kleine Info im Feld „Nächste Buchung“: die letzten 2 Buchungen
