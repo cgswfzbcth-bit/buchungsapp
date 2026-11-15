@@ -80,7 +80,7 @@ input,select{font:inherit;font-size:15px;color:var(--fg);background:var(--field)
 @media (max-width:720px){.form.vac{grid-template-columns:1fr 1fr}.form.vac label:nth-of-type(3){grid-column:1/-1}}
 .vacnote{font-weight:600;color:var(--warn);border-bottom:1px solid var(--line);padding-bottom:10px;margin-bottom:4px}
 
-/* Statistik: ein Balken pro Termin, Anteil „vor dir“ an allen Plätzen */
+/* Statistik: pro Termin eine Überschrift, darunter je Konto ein Balken (Platz X von Y) */
 .stats{display:grid;gap:12px}
 .srow{display:grid;grid-template-columns:minmax(0,11rem) minmax(0,1fr) auto;gap:4px 14px;align-items:center}
 .srow .lbl{font-size:14px;overflow-wrap:anywhere}
@@ -89,12 +89,16 @@ input,select{font:inherit;font-size:15px;color:var(--fg);background:var(--field)
 .fill{height:100%;border-radius:0 4px 4px 0;background:var(--accent);min-width:2px}
 .srow .val{font-size:14px;text-align:right;white-space:nowrap}
 .srow .val b{font-family:var(--mono);font-weight:500}
-@media (max-width:720px){.srow{grid-template-columns:minmax(0,1fr) auto}.srow .track{grid-column:1/-1;grid-row:2}}
+.sterm{display:grid;gap:6px}
+.sterm .lbl{font-size:14px;overflow-wrap:anywhere}
+.sterm .lbl .s{color:var(--muted);font-size:12.5px;margin-left:6px}
+.sterm .srow .who{font-size:13.5px;color:var(--muted)}
+.sterm .srow{grid-template-columns:4.5rem minmax(0,1fr) auto}
+@media (max-width:720px){.srow{grid-template-columns:minmax(0,1fr) auto}.srow .track{grid-column:1/-1;grid-row:2}.sterm .srow{grid-template-columns:4.5rem minmax(0,1fr) auto}.sterm .srow .track{grid-column:auto;grid-row:auto}}
 .recent{gap:8px}
-.recent .srow{grid-template-columns:minmax(0,11rem) minmax(0,1fr) auto}
 .recent .srow .lbl,.recent .srow .val{font-size:13.5px;color:var(--fg)}
 .recent .track{height:8px}
-@media (max-width:720px){.recent .srow{grid-template-columns:minmax(0,1fr) auto}}
+.recent .sterm .lbl{font-size:13.5px}
 
 /* Listen */
 .list{display:grid}
@@ -225,7 +229,7 @@ footer{color:var(--muted);font-size:13px;display:flex;flex-wrap:wrap;gap:6px 16p
     <details class="fold">
       <summary><h2>Vergangene Buchungen</h2><span class="chip" id="statSummary" hidden></span></summary>
       <div class="body">
-        <p class="sub">Wie viele Leute schon gebucht waren, bevor du dran warst – gemessen direkt nach jeder automatischen Buchung. Die Leiste zeigt den Anteil an allen Plätzen. Neueste oben.</p>
+        <p class="sub">Welchen Platz jedes Konto bekommen hat – gemessen direkt nach jeder automatischen Buchung. Volle Leiste = letzter freier Platz. Neueste oben.</p>
         <div class="stats" id="stats"></div>
       </div>
     </details>
@@ -485,14 +489,16 @@ async function loadStats(){
   let rows = [];
   try { rows = JSON.parse((await readFile("statistik.json")).text); }
   catch (e) { if (e.status !== 404){ $("stats").replaceChildren(el("div",{className:"empty"}, e.message)); return; } }
-  // ein Eintrag pro Termin; bei zwei Konten zählt das zuerst gebuchte (kleinste Belegung)
-  const m = new Map();
+  // ein Eintrag pro Termin, darin jedes Konto mit seinem Platz (Reihenfolge wie in config.json)
+  const m = new Map(), order = cfg.accounts.map(a => a.name);
   for (const r of rows){
     const k = `${r.datum}|${r.uhrzeit}|${r.kurs}`;
-    const g = m.get(k) || { ...r, belegt: Infinity, plaetze: 0 };
-    g.belegt = Math.min(g.belegt, r.belegt); g.plaetze = Math.max(g.plaetze, r.plaetze || 0);
+    const g = m.get(k) || { kurs: r.kurs, datum: r.datum, uhrzeit: r.uhrzeit, plaetze: 0, konten: [] };
+    g.plaetze = Math.max(g.plaetze, r.plaetze || 0);
+    g.konten.push({ konto: r.konto, belegt: r.belegt });
     m.set(k, g);
   }
+  for (const g of m.values()) g.konten.sort((a,b) => order.indexOf(a.konto) - order.indexOf(b.konto));
   statTerms = [...m.values()].sort((a,b) => (b.datum + b.uhrzeit).localeCompare(a.datum + a.uhrzeit)).slice(0, 20);
   renderRecent();
   const terms = statTerms, sum = $("statSummary");
@@ -501,22 +507,26 @@ async function loadStats(){
     $("stats").replaceChildren(el("div",{className:"empty",style:"padding:0"},"Noch keine Daten. Die erste Zahl kommt nach der nächsten automatischen Buchung."));
     return;
   }
-  const avg = terms.reduce((s,t) => s + before(t), 0) / terms.length;
+  // Durchschnittsplatz je Konto
+  const avg = order.map(n => { const v = terms.flatMap(t => t.konten.filter(k => k.konto === n).map(k => k.belegt)); return v.length ? `${n} ${(v.reduce((s,x) => s + x, 0) / v.length).toLocaleString("de-DE",{maximumFractionDigits:1})}` : null; }).filter(Boolean);
   sum.hidden = false; sum.className = "chip";
-  sum.textContent = `im Schnitt ${avg.toLocaleString("de-DE",{maximumFractionDigits:1})} vor dir`;
+  sum.textContent = `Ø Platz: ${avg.join(" · ")}`;
   $("stats").replaceChildren(...terms.map(statRow));
 }
 let statTerms = [];
-const before = t => Math.max(0, t.belegt - 1);
-// eine Zeile: Kurs + Termin, Balken (Anteil „vor dir“ an allen Plätzen), Zahl
+// ein Termin: Kurs + Tag, darunter je Konto ein Balken (Platz X von Y; voller Balken = letzter Platz)
 function statRow(t){
   const [y,mo,d] = t.datum.split("-").map(Number), day = fDay(new Date(Date.UTC(y, mo-1, d, 12)));
-  const cap = t.plaetze || Math.max(t.belegt, 1), n = before(t);
-  const tip = `${t.kurs} am ${day}: ${n} ${n === 1 ? "Person war" : "Personen waren"} vor dir gebucht (Platz ${t.belegt}${t.plaetze ? ` von ${t.plaetze}` : ""})`;
-  return el("div",{className:"srow",title:tip},
+  const cap = t.plaetze || Math.max(...t.konten.map(k => k.belegt), 1);
+  return el("div",{className:"sterm"},
     el("div",{className:"lbl"}, t.kurs, el("span",{className:"s"}, `${day}, ${t.uhrzeit} Uhr`)),
-    el("div",{className:"track",role:"img","aria-label":tip}, el("div",{className:"fill",style:`width:${Math.min(100, n / cap * 100)}%`})),
-    el("div",{className:"val"}, el("b",{}, String(n)), ` vor dir${t.plaetze ? ` · ${t.plaetze} Plätze` : ""}`));
+    ...t.konten.map(k => {
+      const tip = `${k.konto}: ${t.kurs} am ${day} – Platz ${k.belegt}${t.plaetze ? ` von ${t.plaetze}` : ""} (${k.belegt - 1} vorher gebucht)`;
+      return el("div",{className:"srow",title:tip},
+        el("div",{className:"who"}, k.konto),
+        el("div",{className:"track",role:"img","aria-label":tip}, el("div",{className:"fill",style:`width:${Math.min(100, k.belegt / cap * 100)}%`})),
+        el("div",{className:"val"}, "Platz ", el("b",{}, String(k.belegt)), t.plaetze ? ` von ${t.plaetze}` : ""));
+    }));
 }
 // kleine Info im Feld „Nächste Buchung“: die letzten 2 Buchungen
 function renderRecent(){
