@@ -264,7 +264,7 @@ const DAYS = ["Sonntag","Montag","Dienstag","Mittwoch","Donnerstag","Freitag","S
 const SHORT = ["So","Mo","Di","Mi","Do","Fr","Sa"];
 const PLATES = ["--plate-red","--plate-blue","--plate-yellow","--plate-green"];
 const KNOWN = ["Olympic Weightlifting","Team-WOD","Endurance","Gymnastics","WOD","FitClass","OpenGym","Introklasse","Join Your Coach"];
-const LEAD_MIN = 48;
+const LEADS = [180, 120, 48]; // wie manage.js: mehrere Starts, falls GitHub sich verspätet
 const $ = id => document.getElementById(id);
 let cfg = null, busy = false;
 
@@ -343,9 +343,9 @@ function scheduleBlock(c){
   }));
   const lines = [...op.values()].sort((x, y) => ((x.wd + 6) % 7) - ((y.wd + 6) % 7) || x.min - y.min).flatMap(o => [
     `    # Freischaltung ${o.label} (für ${o.title})`,
-    ...[60, 120].map(off => { const t = (((o.wd * 1440 + o.min - LEAD_MIN - off) % 10080) + 10080) % 10080; return `    - cron: '${t % 60} ${Math.floor(t / 60) % 24} * * ${Math.floor(t / 1440)}'`; })
+    ...[...new Set(LEADS.flatMap(lead => [60, 120].map(off => { const t = (((o.wd * 1440 + o.min - lead - off) % 10080) + 10080) % 10080; return `${t % 60} ${Math.floor(t / 60) % 24} * * ${Math.floor(t / 1440)}`; })))].map(c => `    - cron: '${c}'`)
   ]);
-  return lines.length ? `  schedule:\n    # Zeiten in UTC, je eine für Winter- und Sommerzeit; ca. ${LEAD_MIN} Min. vor der Freischaltung.\n${lines.join("\n")}\n` : "";
+  return lines.length ? `  schedule:\n    # Zeiten in UTC (Winter- und Sommerzeit); mehrere Starts ca. ${LEADS.map(l => l >= 60 ? `${l / 60} Std.` : `${l} Min.`).join(', ')} vor der Freischaltung – der erste wartet, spätere machen nichts.\n${lines.join("\n")}\n` : "";
 }
 async function syncSchedule(){
   const f = await readFile(".github/workflows/buchen.yml");
@@ -465,7 +465,8 @@ async function loadRuns(){
   try {
     const names = { "Kurse buchen": "Automatische Buchung", "Einmal buchen": "Einmal buchen", "Kurse verwalten": "Kurse geändert" };
     const l = await gh(`/actions/runs?per_page=10`);
-    const runs = l.workflow_runs || [];
+    // automatische Läufe, die GitHub abgebrochen hat (ein späterer Zusatzstart hat sie ersetzt), ausblenden
+    const runs = (l.workflow_runs || []).filter(r => !(r.event === "schedule" && r.conclusion === "cancelled"));
     const last = runs[0], sum = $("runSummary");
     sum.hidden = !last;
     if (last){
